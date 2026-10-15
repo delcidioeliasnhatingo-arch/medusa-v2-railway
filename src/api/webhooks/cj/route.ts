@@ -67,7 +67,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
     const displayIdMatch = /^AVEART-(\d+)$/.exec(storeOrderNumber)
     if (!displayIdMatch) {
-      console.warn("CJ webhook could not map supplier order number to an AVEART order", { type: payload.type, storeOrderNumber })
+      console.warn("CJ webhook could not map supplier order number to an AVEART order", { type, storeOrderNumber })
       return
     }
 
