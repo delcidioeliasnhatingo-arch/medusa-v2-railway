@@ -37,18 +37,68 @@ type CjProduct = {
   stanProducts?: CjVariant[]
 }
 
+let cachedAccessToken: string | undefined
+let cachedRefreshToken: string | undefined
+
 async function getCjToken(): Promise<string> {
-  const token = process.env.CJ_ACCESS_TOKEN?.trim()
-  if (!token) throw new Error("CJ_ACCESS_TOKEN is not configured in Railway.")
-  return token
+  if (cachedAccessToken) return cachedAccessToken
+
+  const accessToken = process.env.CJ_ACCESS_TOKEN?.trim()
+  const refreshToken = process.env.CJ_REFRESH_TOKEN?.trim()
+  const apiKey = process.env.CJ_API_KEY?.trim()
+
+  if (accessToken) {
+    cachedAccessToken = accessToken
+    cachedRefreshToken = refreshToken
+    return accessToken
+  }
+  if (refreshToken) return refreshCjAccessToken(refreshToken)
+  if (apiKey) return obtainCjTokenFromApiKey(apiKey)
+
+  throw new Error("CJ credentials are missing. Configure CJ_API_KEY, CJ_ACCESS_TOKEN and/or CJ_REFRESH_TOKEN in Railway.")
+}
+
+async function obtainCjTokenFromApiKey(apiKey: string): Promise<string> {
+  const response = await fetch(`${CJ_BASE_URL}/authentication/getAccessToken`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ apiKey }),
+    signal: AbortSignal.timeout(15000),
+  })
+  const payload = (await response.json()) as CjEnvelope<{ accessToken?: string; refreshToken?: string }>
+  if (!response.ok || payload.code !== 200 || !payload.data?.accessToken) {
+    throw new Error(payload.message || `CJ token acquisition failed (HTTP ${response.status}). Check CJ_API_KEY.`)
+  }
+  cachedAccessToken = payload.data.accessToken
+  cachedRefreshToken = payload.data.refreshToken || process.env.CJ_REFRESH_TOKEN?.trim()
+  return cachedAccessToken
+}
+
+async function refreshCjAccessToken(refreshToken: string): Promise<string> {
+  const response = await fetch(`${CJ_BASE_URL}/authentication/refreshAccessToken`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ refreshToken }),
+    signal: AbortSignal.timeout(15000),
+  })
+  const payload = (await response.json()) as CjEnvelope<{ accessToken?: string; refreshToken?: string }>
+  if (!response.ok || payload.code !== 200 || !payload.data?.accessToken) {
+    const apiKey = process.env.CJ_API_KEY?.trim()
+    if (apiKey) return obtainCjTokenFromApiKey(apiKey)
+    throw new Error(payload.message || `CJ token refresh failed (HTTP ${response.status}); configure a valid CJ_API_KEY to reauthorize.`)
+  }
+  cachedAccessToken = payload.data.accessToken
+  cachedRefreshToken = payload.data.refreshToken || refreshToken
+  return cachedAccessToken
 }
 
 async function queryCjProductDetail(productId: string): Promise<CjProduct> {
-  const token = await getCjToken()
-  const response = await fetch(`${CJ_BASE_URL}/product/productDetail/query`, {
+  let token = await getCjToken()
+
+  const request = (accessToken: string) => fetch(`${CJ_BASE_URL}/product/productDetail/query`, {
     method: "POST",
     headers: {
-      "CJ-Access-Token": token,
+      "CJ-Access-Token": accessToken,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
@@ -56,9 +106,22 @@ async function queryCjProductDetail(productId: string): Promise<CjProduct> {
     signal: AbortSignal.timeout(20000),
   })
 
-  const payload = (await response.json()) as CjEnvelope<CjProduct>
-  if (!response.ok || payload.code !== 200 || payload.result === false || !payload.data) {
-    throw new Error(payload.message || `CJ product detail request failed (HTTP ${response.status}).`)
+  let response = await request(token)
+  let payload = (await response.json()) as CjEnvelope<CjProduct>
+  const invalidToken = response.status === 401 || payload.code === 1600001 || payload.code === 1600002
+  if (invalidToken) {
+    const refreshToken = cachedRefreshToken || process.env.CJ_REFRESH_TOKEN?.trim()
+    token = refreshToken
+      ? await refreshCjAccessToken(refreshToken)
+      : process.env.CJ_API_KEY?.trim()
+        ? await obtainCjTokenFromApiKey(process.env.CJ_API_KEY.trim())
+        : token
+    response = await request(token)
+    payload = (await response.json()) as CjEnvelope<CjProduct>
+  }
+
+  if (!response.ok || payload.code !== 200 || payload.result === false || payload.success === false || !payload.data) {
+    throw new Error(payload.message || `CJ product detail request failed (HTTP ${response.status}, code ${payload.code ?? "unknown"}).`)
   }
   return payload.data
 }
