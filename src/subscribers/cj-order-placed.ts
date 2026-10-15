@@ -16,33 +16,75 @@ type CjVariant = { id?: string; sku?: string; nameen?: string; variantkey?: stri
 type CjProduct = { id?: string; stanProducts?: CjVariant[] }
 type CjFreight = { logisticName?: string; logisticPrice?: number | string; error?: string; errorEn?: string }
 
+let cachedAccessToken: string | undefined
+let cachedRefreshToken: string | undefined
+
 async function getCjToken(): Promise<string> {
-  const token = process.env.CJ_ACCESS_TOKEN?.trim()
-  if (token) return token
+  if (cachedAccessToken) return cachedAccessToken
+  const accessToken = process.env.CJ_ACCESS_TOKEN?.trim()
+  cachedRefreshToken = process.env.CJ_REFRESH_TOKEN?.trim()
+  if (accessToken) {
+    cachedAccessToken = accessToken
+    return accessToken
+  }
   const apiKey = process.env.CJ_API_KEY?.trim()
   if (!apiKey) throw new Error("CJ_ACCESS_TOKEN or CJ_API_KEY must be configured")
+  return obtainCjTokenFromApiKey(apiKey)
+}
+
+async function obtainCjTokenFromApiKey(apiKey: string): Promise<string> {
   const response = await fetch(`${CJ_BASE_URL}/authentication/getAccessToken`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ apiKey }),
     signal: AbortSignal.timeout(15000),
   })
-  const payload = await response.json() as CjEnvelope<{ accessToken?: string }>
+  const payload = await response.json() as CjEnvelope<{ accessToken?: string; refreshToken?: string }>
   if (!response.ok || payload.code !== 200 || !payload.data?.accessToken) {
     throw new Error(payload.message || `CJ authentication failed (HTTP ${response.status})`)
   }
-  return payload.data.accessToken
+  cachedAccessToken = payload.data.accessToken
+  cachedRefreshToken = payload.data.refreshToken || cachedRefreshToken
+  return cachedAccessToken
+}
+
+async function refreshCjToken(): Promise<string> {
+  const refreshToken = cachedRefreshToken || process.env.CJ_REFRESH_TOKEN?.trim()
+  if (refreshToken) {
+    const response = await fetch(`${CJ_BASE_URL}/authentication/refreshAccessToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ refreshToken }),
+      signal: AbortSignal.timeout(15000),
+    })
+    const payload = await response.json() as CjEnvelope<{ accessToken?: string; refreshToken?: string }>
+    if (response.ok && payload.code === 200 && payload.data?.accessToken) {
+      cachedAccessToken = payload.data.accessToken
+      cachedRefreshToken = payload.data.refreshToken || refreshToken
+      return cachedAccessToken
+    }
+  }
+  const apiKey = process.env.CJ_API_KEY?.trim()
+  if (apiKey) return obtainCjTokenFromApiKey(apiKey)
+  throw new Error("CJ token expired and refresh failed. Check CJ_REFRESH_TOKEN or CJ_API_KEY.")
 }
 
 async function cjPost<T>(path: string, body: unknown): Promise<T> {
-  const token = await getCjToken()
-  const response = await fetch(`${CJ_BASE_URL}${path}`, {
+  let token = await getCjToken()
+  const request = (accessToken: string) => fetch(`${CJ_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "CJ-Access-Token": token, "Content-Type": "application/json", Accept: "application/json" },
+    headers: { "CJ-Access-Token": accessToken, "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(25000),
   })
-  const payload = await response.json() as CjEnvelope<T>
+  let response = await request(token)
+  let payload = await response.json() as CjEnvelope<T>
+  const invalidToken = response.status === 401 || payload.code === 1600001 || payload.code === 1600002
+  if (invalidToken) {
+    token = await refreshCjToken()
+    response = await request(token)
+    payload = await response.json() as CjEnvelope<T>
+  }
   if (!response.ok || payload.code !== 200 || payload.result === false || payload.success === false || payload.data == null) {
     throw new Error(payload.message || `CJ request ${path} failed (HTTP ${response.status}, code ${payload.code ?? "unknown"})`)
   }
