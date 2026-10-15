@@ -117,12 +117,41 @@ async function getCjVariantId(productId: string, sku: string, storedVariantId: s
  * CJ payType=2 pays from the merchant's CJ balance, so never test with a real order.
  */
 export default async function cjOrderPlacedHandler({ event, container }: SubscriberArgs<{ id: string }>) {
-  const orderId = event.data.id
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
+  const eventName = String((event as any).name || "")
+  let orderId = event.data.id
+
+  // A captured-payment event carries a payment ID, not an order ID. Resolve its
+  // payment collection and then the linked order before processing fulfillment.
+  if (eventName === "payment.captured") {
+    const { data: payments } = await query.graph({
+      entity: "payment",
+      fields: ["id", "payment_collection_id"],
+      filters: { id: event.data.id },
+    })
+    const paymentCollectionId = asText((payments?.[0] as any)?.payment_collection_id)
+    if (!paymentCollectionId) {
+      console.warn("CJ fulfillment: captured payment has no payment collection", { paymentId: event.data.id })
+      return
+    }
+    const { data: linkedOrders } = await query.graph({
+      entity: "order",
+      fields: ["id", "display_id"],
+      filters: { payment_collections: { id: paymentCollectionId } } as any,
+    })
+    orderId = asText((linkedOrders?.[0] as any)?.id)
+    if (!orderId) {
+      console.info("CJ fulfillment: captured payment is not linked to an order yet", { paymentId: event.data.id })
+      return
+    }
+  }
+
   const { data } = await query.graph({
     entity: "order",
     fields: [
       "id", "display_id", "email", "currency_code", "metadata",
+      "payment_collections.id", "payment_collections.status",
+      "payment_collections.payments.id", "payment_collections.payments.captured_at",
       "shipping_address.*",
       "items.*", "items.variant.*", "items.variant.product.*",
     ],
@@ -132,8 +161,22 @@ export default async function cjOrderPlacedHandler({ event, container }: Subscri
   if (!order) throw new Error(`CJ fulfillment: Medusa order ${orderId} was not found`)
 
   const orderMetadata = (order.metadata || {}) as Record<string, unknown>
-  if (orderMetadata.cj_order_id || orderMetadata.cj_fulfillment_status === "submitted") {
-    console.info(`CJ fulfillment already submitted for Medusa order ${orderId}; skipping duplicate event`)
+  const existingStatus = asText(orderMetadata.cj_fulfillment_status)
+  if (orderMetadata.cj_order_id || ["submitting", "submitted", "submission_uncertain"].includes(existingStatus)) {
+    console.info(`CJ fulfillment already claimed/submitted for Medusa order ${orderId}; skipping duplicate event`)
+    return
+  }
+
+  // Do not spend the merchant's CJ balance for authorized, pending, or unpaid
+  // orders. The payment.captured subscription below retries this path after capture.
+  const paymentCollections = Array.isArray(order.payment_collections) ? order.payment_collections : []
+  const paymentConfirmed = paymentCollections.length > 0 && paymentCollections.every((collection: any) =>
+    collection.status === "captured" ||
+    (Array.isArray(collection.payments) && collection.payments.length > 0 &&
+      collection.payments.every((payment: any) => Boolean(payment.captured_at))),
+  )
+  if (!paymentConfirmed) {
+    console.info(`CJ fulfillment held for Medusa order ${orderId}: payment is not fully captured`)
     return
   }
 
@@ -198,8 +241,21 @@ export default async function cjOrderPlacedHandler({ event, container }: Subscri
   }
   const logisticName = asText(availableFreight[0].logisticName)
 
-  // Deterministic order number helps prevent duplicate supplier orders on event retries.
+  // Claim the order before calling CJ. If the request times out after CJ accepts it,
+  // a retry must not create a second supplier order. Such cases require reconciliation.
   const supplierOrderNumber = `AVEART-${String(order.display_id || order.id).slice(0, 40)}`
+  await updateOrderWorkflow(container).run({
+    input: {
+      id: order.id,
+      user_id: "",
+      metadata: {
+        ...orderMetadata,
+        cj_fulfillment_status: "submitting",
+        cj_order_number: supplierOrderNumber,
+        cj_submission_started_at: new Date().toISOString(),
+      },
+    },
+  })
   const created = await cjPost<Record<string, unknown>>("/shopping/order/createOrderV2", {
     orderNumber: supplierOrderNumber,
     shippingZip: asText(address.postal_code),
@@ -247,5 +303,5 @@ export default async function cjOrderPlacedHandler({ event, container }: Subscri
 }
 
 export const config: SubscriberConfig = {
-  event: "order.placed",
+  event: ["order.placed", "payment.captured"],
 }
