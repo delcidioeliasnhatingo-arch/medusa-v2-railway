@@ -200,6 +200,13 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       ...(variant.sku ? { sku: variant.sku } : {}),
       manage_inventory: false,
       allow_backorder: true,
+      metadata: {
+        supplier: "cjdropshipping",
+        cj_product_id: productId,
+        cj_variant_id: String(variant.id || ""),
+        cj_sku: String(variant.sku || ""),
+        cj_supplier_price_usd: String(cost),
+      },
       prices: [{
         currency_code: "usd",
         amount: Math.round((cost as number) / (1 - TARGET_GROSS_MARGIN) * 100) / 100,
