@@ -1,7 +1,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
-import { updateOrdersWorkflow } from "@medusajs/medusa/core-flows"
+import { updateOrderWorkflow } from "@medusajs/medusa/core-flows"
 
 type CjWebhook = {
   messageId?: string
@@ -81,10 +81,11 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       console.warn("CJ webhook received for unknown AVEART order", { storeOrderNumber })
       return
     }
-    await updateOrdersWorkflow(req.scope).run({
+    await updateOrderWorkflow(req.scope).run({
       input: {
-        selector: { id: order.id },
-        update: { metadata: { ...(order.metadata || {}), ...patch } },
+        id: order.id,
+        user_id: "",
+        metadata: { ...(order.metadata || {}), ...patch },
       },
     })
   })().catch((error) => console.error("CJ webhook synchronization failed:", error))
