@@ -3,6 +3,11 @@ import { defineMiddlewares } from "@medusajs/framework/http"
 export default defineMiddlewares({
   routes: [
     {
+      matcher: "/webhooks/cj",
+      method: "POST",
+      bodyParser: { preserveRawBody: true },
+    },
+    {
       matcher: "/",
       method: "GET",
       middlewares: [
