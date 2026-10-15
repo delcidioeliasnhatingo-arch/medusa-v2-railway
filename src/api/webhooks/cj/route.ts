@@ -28,7 +28,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
 
   const payload = req.body as CjWebhook
-  if (!payload || !payload.type || !payload.params) {
+  if (!payload || !(payload.type || payload.messageType) || !payload.params) {
     return res.status(400).json({ received: false, message: "Invalid CJ webhook payload." })
   }
 
@@ -37,35 +37,40 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   void (async () => {
     const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
     const params = payload.params || {}
+    const type = String(payload.type || payload.messageType || "").toUpperCase()
     let storeOrderNumber = ""
     let patch: Record<string, unknown> = {}
 
-    if (payload.type === "ORDER") {
-      storeOrderNumber = String(params.orderNumber || params.orderNum || "")
+    if (type === "ORDER") {
+      storeOrderNumber = String(params.storeOrderNumber || params.orderNumber || params.orderNum || params.orderNo || "")
       patch = {
-        cj_order_status: params.orderStatus || params.status || null,
-        cj_order_id: params.cjOrderId || null,
-        cj_logistic_name: params.logisticName || null,
-        cj_tracking_number: params.trackNumber || null,
-        cj_tracking_url: params.trackingUrl || null,
+        cj_order_status: params.orderStatus || params.status,
+        cj_order_id: params.cjOrderId || params.orderId,
+        cj_logistic_name: params.logisticName,
+        cj_tracking_number: params.trackNumber || params.trackingNumber,
+        cj_tracking_url: params.trackingUrl,
         cj_last_supplier_update: params.updateDate || new Date().toISOString(),
       }
-    } else if (payload.type === "LOGISTIC") {
+    } else if (type === "LOGISTIC") {
       const numbers = Array.isArray(params.storeOrderNumbers) ? params.storeOrderNumbers : []
-      storeOrderNumber = String(numbers[0] || "")
+      storeOrderNumber = String(numbers[0] || params.storeOrderNumber || params.orderNumber || params.orderNum || "")
       patch = {
-        cj_tracking_number: params.trackingNumber || null,
-        cj_tracking_url: params.trackingUrl || null,
-        cj_tracking_provider: params.trackingProvider || null,
-        cj_tracking_status: params.trackingStatus ?? null,
-        cj_tracking_events: params.logisticsTrackEvents || null,
-        cj_last_supplier_update: new Date().toISOString(),
+        cj_tracking_number: params.trackingNumber || params.trackNumber,
+        cj_tracking_url: params.trackingUrl,
+        cj_tracking_provider: params.trackingProvider || params.logisticName,
+        cj_tracking_status: params.trackingStatus || params.status,
+        cj_tracking_events: params.logisticsTrackEvents,
+        cj_last_supplier_update: params.updateDate || new Date().toISOString(),
       }
     } else {
+      console.info("Ignoring unsupported CJ webhook topic", { type })
       return
     }
 
-    const displayIdMatch = /^AVEART-(\d+)$/.exec(storeOrderNumber)
+    // CJ may send partial updates. Never erase a known value with null/empty fields.
+    patch = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== null && value !== undefined && value !== ""))
+
+    const displayIdMatch = /^AVEART-(\\d+)$/.exec(storeOrderNumber)
     if (!displayIdMatch) {
       console.warn("CJ webhook could not map supplier order number to an AVEART order", { type, storeOrderNumber })
       return
