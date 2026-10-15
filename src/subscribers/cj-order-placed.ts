@@ -1,6 +1,6 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
-import { updateOrdersWorkflow } from "@medusajs/medusa/core-flows"
+import { updateOrderWorkflow } from "@medusajs/medusa/core-flows"
 
 const CJ_BASE_URL = "https://developers.cjdropshipping.com/api2.0/v1"
 
@@ -123,7 +123,7 @@ export default async function cjOrderPlacedHandler({ event, container }: Subscri
   }
 
   const fromCountryCode = (process.env.CJ_FROM_COUNTRY_CODE || "CN").trim().toUpperCase()
-  const products = []
+  const products: Array<{ vid: string; sku: string; quantity: number; storeLineItemId: string; variantOptions: string }> = []
   for (const item of cjItems) {
     const variant = item.variant || {}
     const product = variant.product || {}
@@ -186,19 +186,18 @@ export default async function cjOrderPlacedHandler({ event, container }: Subscri
     throw new Error(`CJ response for ${supplierOrderNumber} did not include an order ID; inspect CJ order history before retrying`)
   }
 
-  await updateOrdersWorkflow(container).run({
+  await updateOrderWorkflow(container).run({
     input: {
-      selector: { id: order.id },
-      update: {
-        metadata: {
-          ...orderMetadata,
-          cj_fulfillment_status: "submitted",
-          cj_order_id: cjOrderId,
-          cj_order_number: supplierOrderNumber,
-          cj_logistic_name: logisticName,
-          cj_auto_paid_from_balance: true,
-          cj_submitted_at: new Date().toISOString(),
-        },
+      id: order.id,
+      user_id: "",
+      metadata: {
+        ...orderMetadata,
+        cj_fulfillment_status: "submitted",
+        cj_order_id: cjOrderId,
+        cj_order_number: supplierOrderNumber,
+        cj_logistic_name: logisticName,
+        cj_auto_paid_from_balance: true,
+        cj_submitted_at: new Date().toISOString(),
       },
     },
   })
