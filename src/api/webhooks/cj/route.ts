@@ -70,7 +70,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     // CJ may send partial updates. Never erase a known value with null/empty fields.
     patch = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== null && value !== undefined && value !== ""))
 
-    const displayIdMatch = /^AVEART-(\\d+)$/.exec(storeOrderNumber)
+    const displayIdMatch = /^AVEART-(\d+)$/.exec(storeOrderNumber)
     if (!displayIdMatch) {
       console.warn("CJ webhook could not map supplier order number to an AVEART order", { type, storeOrderNumber })
       return
