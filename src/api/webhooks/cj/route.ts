@@ -79,7 +79,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     const { data } = await query.graph({
       entity: "order",
       fields: ["id", "display_id", "metadata"],
-      filters: { display_id: displayIdMatch[1] },
+      filters: { display_id: Number(displayIdMatch[1]) },
     })
     const order = data?.[0] as any
     if (!order) {
