@@ -303,11 +303,10 @@ export default async function cjOrderPlacedHandler({ event, container }: Subscri
         },
       },
     })
-    console.info(`CJ order ${cjOrderId} created for Medusa order ${order.id}; logistics=${logisticName}`
+    console.info(`CJ order ${cjOrderId} created for Medusa order ${order.id}; logistics=${logisticName}`)
   } finally {
     await locking.release(lockKey)
   }
-})
 }
 
 export const config: SubscriberConfig = {
