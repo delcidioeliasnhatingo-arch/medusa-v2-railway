@@ -267,10 +267,19 @@ class DebitoPayPaymentProviderService extends AbstractPaymentProvider<Options> {
 
     const checkoutUrl = stringValue(payment.checkout_url) || stringValue(response.checkout_url)
     const responseStatus = stringValue(payment.status) || stringValue(response.status) || "pending"
+    const mappedInitialStatus = this.mapStatus(responseStatus)
+    if (
+      mappedInitialStatus === PaymentSessionStatus.ERROR ||
+      mappedInitialStatus === PaymentSessionStatus.CANCELED
+    ) {
+      throw new Error(`Debito Pay did not initiate the payment successfully (status: ${responseStatus}).`)
+    }
 
     return {
       id: paymentId,
-      status: PaymentSessionStatus.PENDING_AUTHORIZATION,
+      status: mappedInitialStatus === PaymentSessionStatus.CAPTURED
+        ? PaymentSessionStatus.CAPTURED
+        : PaymentSessionStatus.PENDING_AUTHORIZATION,
       data: {
         payment_id: paymentId,
         session_id: stringValue(inputData.session_id),
