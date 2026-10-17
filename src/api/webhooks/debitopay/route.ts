@@ -44,7 +44,10 @@ function isValidSignature(rawBody: Buffer, signature: string, secret: string) {
     return { valid: false, formatValid: false }
   }
 
-  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest()
+  // Debito Pay documents HMAC-SHA256(secret, exact raw request body), hex encoded.
+  // Trim accidental whitespace/newlines copied into the Railway environment variable.
+  const signingSecret = secret.trim()
+  const expected = crypto.createHmac("sha256", signingSecret).update(rawBody).digest()
   const received = Buffer.from(normalized, "hex")
   return {
     valid: received.length === expected.length && crypto.timingSafeEqual(expected, received),
@@ -78,7 +81,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const signature = Array.isArray(headerValue) ? headerValue[0] : headerValue
   const rawBody = getRawBodyBytes(req.rawBody)
 
-  if (!secret) {
+  if (typeof secret !== "string" || secret.trim().length === 0) {
     console.error("[Debito Pay webhook] signing secret is not configured")
     return res.status(500).json({ error: "Webhook is not configured" })
   }
