@@ -72,6 +72,17 @@ function asBuffer(value: unknown): Buffer | null {
   if (Buffer.isBuffer(value)) return value
   if (typeof value === "string") return Buffer.from(value, "utf8")
   if (value instanceof Uint8Array) return Buffer.from(value)
+  // Redis/event-bus JSON serialization may represent a Buffer this way.
+  if (value !== null && typeof value === "object") {
+    const serialized = value as { type?: unknown; data?: unknown }
+    if (
+      serialized.type === "Buffer" &&
+      Array.isArray(serialized.data) &&
+      serialized.data.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+    ) {
+      return Buffer.from(serialized.data)
+    }
+  }
   return null
 }
 
