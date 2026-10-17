@@ -104,7 +104,7 @@ async function confirmPaymentWithDebitoPay(
   const configuredEndpoint = process.env.DEBITOPAY_PAYMENT_ENDPOINT || "payment-orchestrator"
   const endpoint = /^https?:\/\//i.test(configuredEndpoint)
     ? configuredEndpoint
-    : \`\${baseUrl}/\${configuredEndpoint.replace(/^\/+/, "")}\`
+    : baseUrl + "/" + configuredEndpoint.replace(/^\/+/, "")
 
   try {
     const response = await fetch(endpoint, {
