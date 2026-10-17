@@ -23,24 +23,38 @@ const SUPPORTED_EVENTS = new Set([
   "payment.chargeback",
 ])
 
-function isValidSignature(rawBody: string, signature: string, secret: string) {
-  // Debito Pay documents x-webhook-signature as a hex HMAC-SHA256 digest.
-  if (!/^[a-f0-9]{64}$/i.test(signature)) return false
+function getRawBodyBytes(value: unknown): Buffer | null {
+  if (Buffer.isBuffer(value)) return value
+  if (typeof value === "string") return Buffer.from(value, "utf8")
+  if (value instanceof Uint8Array) return Buffer.from(value)
+  return null
+}
 
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody, "utf8")
-    .digest()
+function normalizeSignature(value: string): string | null {
+  // The documented format is a hexadecimal HMAC-SHA256 digest. Some webhook
+  // senders additionally prefix the digest with "sha256=".
+  const trimmed = value.trim()
+  const digest = trimmed.replace(/^sha256=/i, "")
+  return /^[a-f0-9]{64}$/i.test(digest) ? digest.toLowerCase() : null
+}
 
-  const received = Buffer.from(signature, "hex")
-  return received.length === expected.length && crypto.timingSafeEqual(expected, received)
+function isValidSignature(rawBody: Buffer, signature: string, secret: string) {
+  const normalized = normalizeSignature(signature)
+  if (!normalized) {
+    return { valid: false, formatValid: false }
+  }
+
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest()
+  const received = Buffer.from(normalized, "hex")
+  return {
+    valid: received.length === expected.length && crypto.timingSafeEqual(expected, received),
+    formatValid: true,
+  }
 }
 
 /**
  * GET /webhooks/debitopay
- *
- * Lightweight health check for a browser/manual endpoint check. This does not
- * validate the Debito Pay signing secret or prove that a signed POST succeeds.
+ * Health check only; it does not validate signed webhook delivery.
  */
 export async function GET(_req: MedusaRequest, res: MedusaResponse) {
   return res.status(200).json({
@@ -54,35 +68,50 @@ export async function GET(_req: MedusaRequest, res: MedusaResponse) {
 
 /**
  * POST /webhooks/debitopay
- *
- * This endpoint authenticates and acknowledges Debito Pay notifications.
- * It deliberately does not mark a Medusa order as paid: that requires the
- * payment creation flow to persist and reconcile the Medusa payment/session
- * with Debito Pay's payment_id/source_id.
+ * Authenticate and acknowledge Debito Pay notifications. Order/payment
+ * reconciliation remains separate until the Medusa payment session is mapped
+ * to Debito Pay's payment_id.
  */
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const secret = process.env.DEBITOPAY_WEBHOOK_SECRET
-  const signatureHeader = req.headers["x-webhook-signature"]
-  const rawBodyValue = req.rawBody
+  const headerValue = req.headers["x-webhook-signature"]
+  const signature = Array.isArray(headerValue) ? headerValue[0] : headerValue
+  const rawBody = getRawBodyBytes(req.rawBody)
 
   if (!secret) {
-    console.error("[Debito Pay webhook] DEBITOPAY_WEBHOOK_SECRET is not configured")
+    console.error("[Debito Pay webhook] signing secret is not configured")
     return res.status(500).json({ error: "Webhook is not configured" })
   }
 
-  if (typeof signatureHeader !== "string" || !rawBodyValue) {
+  if (typeof signature !== "string" || !rawBody) {
+    console.warn("[Debito Pay webhook] signature input missing", {
+      signatureHeaderPresent: typeof signature === "string",
+      rawBodyPresent: rawBody !== null,
+      rawBodyType: Buffer.isBuffer(req.rawBody) ? "Buffer" : typeof req.rawBody,
+      rawBodyBytes: rawBody?.length ?? 0,
+    })
     return res.status(401).json({ error: "Missing signature or raw request body" })
   }
 
-  const rawBody = Buffer.isBuffer(rawBodyValue)
-    ? rawBodyValue.toString("utf8")
-    : String(rawBodyValue)
-
-  if (!isValidSignature(rawBody, signatureHeader, secret)) {
+  const verification = isValidSignature(rawBody, signature, secret)
+  if (!verification.valid) {
+    console.warn("[Debito Pay webhook] signature verification failed", {
+      signatureFormatValid: verification.formatValid,
+      signatureLength: signature.trim().length,
+      rawBodyBytes: rawBody.length,
+      rawBodySha256: crypto.createHash("sha256").update(rawBody).digest("hex"),
+      // Never log the signature or signing secret.
+    })
     return res.status(401).json({ error: "Invalid webhook signature" })
   }
 
-  const event = req.body as DebitoPayEvent
+  let event: DebitoPayEvent
+  try {
+    event = JSON.parse(rawBody.toString("utf8")) as DebitoPayEvent
+  } catch {
+    return res.status(400).json({ error: "Invalid JSON body" })
+  }
+
   if (!event || typeof event.event !== "string" || !SUPPORTED_EVENTS.has(event.event)) {
     return res.status(400).json({ error: "Unsupported or invalid event" })
   }
@@ -91,14 +120,12 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     return res.status(400).json({ error: "Missing payment_id" })
   }
 
-  // Avoid logging customer data or credentials. Provider retries are expected.
   console.info("[Debito Pay webhook] Verified event received", {
     event: event.event,
     payment_id: event.data.payment_id,
     reference: event.data.reference,
   })
 
-  // Debito Pay asks webhook receivers to acknowledge quickly with HTTP 200.
   return res.status(200).json({
     received: true,
     event: event.event,
