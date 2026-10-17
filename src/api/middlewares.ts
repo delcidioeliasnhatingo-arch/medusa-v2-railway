@@ -8,6 +8,12 @@ export default defineMiddlewares({
       bodyParser: { preserveRawBody: true },
     },
     {
+      // Debito Pay signs the exact raw JSON body with HMAC-SHA256.
+      matcher: "/webhooks/debitopay",
+      method: ["POST"],
+      bodyParser: { preserveRawBody: true },
+    },
+    {
       matcher: "/",
       method: "GET",
       middlewares: [
