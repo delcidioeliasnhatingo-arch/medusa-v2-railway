@@ -38,21 +38,39 @@ function normalizeSignature(value: string): string | null {
   return /^[a-f0-9]{64}$/i.test(digest) ? digest.toLowerCase() : null
 }
 
+function digestMatches(body: Buffer, signatureHex: string, secret: string): boolean {
+  const expected = crypto.createHmac("sha256", secret).update(body).digest()
+  const received = Buffer.from(signatureHex, "hex")
+  return received.length === expected.length && crypto.timingSafeEqual(expected, received)
+}
+
 function isValidSignature(rawBody: Buffer, signature: string, secret: string) {
   const normalized = normalizeSignature(signature)
   if (!normalized) {
-    return { valid: false, formatValid: false }
+    return { valid: false, formatValid: false, mode: null as string | null }
   }
 
-  // Debito Pay documents HMAC-SHA256(secret, exact raw request body), hex encoded.
-  // Trim accidental whitespace/newlines copied into the Railway environment variable.
   const signingSecret = secret.trim()
-  const expected = crypto.createHmac("sha256", signingSecret).update(rawBody).digest()
-  const received = Buffer.from(normalized, "hex")
-  return {
-    valid: received.length === expected.length && crypto.timingSafeEqual(expected, received),
-    formatValid: true,
+
+  // First and preferred path: Debito Pay's documented HMAC over the exact raw body.
+  if (digestMatches(rawBody, normalized, signingSecret)) {
+    return { valid: true, formatValid: true, mode: "raw-body" }
   }
+
+  // Compatibility path: some senders sign JSON.stringify(parsedPayload) instead
+  // of the exact transmitted bytes. This still requires a valid HMAC with the
+  // configured secret; it never bypasses signature verification.
+  try {
+    const parsed = JSON.parse(rawBody.toString("utf8"))
+    const serializedBody = Buffer.from(JSON.stringify(parsed), "utf8")
+    if (digestMatches(serializedBody, normalized, signingSecret)) {
+      return { valid: true, formatValid: true, mode: "serialized-json" }
+    }
+  } catch {
+    // Keep the raw-body verification result when the request is not valid JSON.
+  }
+
+  return { valid: false, formatValid: true, mode: null as string | null }
 }
 
 /**
@@ -127,6 +145,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     event: event.event,
     payment_id: event.data.payment_id,
     reference: event.data.reference,
+    signatureBodyMode: verification.mode,
   })
 
   return res.status(200).json({
