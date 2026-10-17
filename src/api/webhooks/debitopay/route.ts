@@ -100,11 +100,11 @@ async function confirmPaymentWithDebitoPay(
   if (!apiKey) return null
 
   const baseUrl = (process.env.DEBITOPAY_API_BASE_URL ||
-    "https://gyqoaningqhurhvdugne.supabase.co/functions/v1").replace(/\\/+$/, "")
+    "https://gyqoaningqhurhvdugne.supabase.co/functions/v1").replace(/\/+$/, "")
   const configuredEndpoint = process.env.DEBITOPAY_PAYMENT_ENDPOINT || "payment-orchestrator"
-  const endpoint = /^https?:\\/\\//i.test(configuredEndpoint)
+  const endpoint = /^https?:\/\//i.test(configuredEndpoint)
     ? configuredEndpoint
-    : `${baseUrl}/${configuredEndpoint.replace(/^\\/+/, "")}`
+    : \`\${baseUrl}/\${configuredEndpoint.replace(/^\/+/, "")}\`
 
   try {
     const response = await fetch(endpoint, {
