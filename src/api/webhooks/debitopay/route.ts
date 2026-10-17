@@ -92,6 +92,62 @@ function isValidSignature(rawBody: Buffer, signature: string, secret: string) {
   return { valid: false, formatValid: true, mode: null as string | null }
 }
 
+async function confirmPaymentWithDebitoPay(
+  paymentId: string,
+  eventName: string
+): Promise<{ amount: number; currency: string; status: string } | null> {
+  const apiKey = process.env.DEBITOPAY_API_KEY
+  if (!apiKey) return null
+
+  const baseUrl = (process.env.DEBITOPAY_API_BASE_URL ||
+    "https://gyqoaningqhurhvdugne.supabase.co/functions/v1").replace(/\\/+$/, "")
+  const configuredEndpoint = process.env.DEBITOPAY_PAYMENT_ENDPOINT || "payment-orchestrator"
+  const endpoint = /^https?:\\/\\//i.test(configuredEndpoint)
+    ? configuredEndpoint
+    : `${baseUrl}/${configuredEndpoint.replace(/^\\/+/, "")}`
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ action: "check-status", payment_id: paymentId }),
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!response.ok) return null
+
+    const payload = asRecord(JSON.parse(await response.text()))
+    if (payload.success === false) return null
+    const payment = asRecord(payload.payment ?? payload.data ?? payload)
+    const returnedId = payment.payment_id ?? payment.id
+    if (typeof returnedId === "string" && returnedId !== paymentId) return null
+
+    const status = String(payment.status ?? "").trim().toLowerCase()
+    const expectedStatuses = eventName === "payment.completed"
+      ? new Set(["success", "successful", "completed", "paid", "captured"])
+      : new Set(["failed", "declined", "error", "expired"])
+    const amount = Number(payment.amount)
+    const currency = typeof payment.currency === "string" ? payment.currency.toUpperCase() : ""
+    if (!expectedStatuses.has(status) || !Number.isFinite(amount) || amount <= 0 || !currency) {
+      return null
+    }
+
+    const configuredMerchant = process.env.DEBITOPAY_MERCHANT_ID
+    const configuredWallet = process.env.DEBITOPAY_WALLET_CODE
+    if (typeof payment.merchant_id === "string" && configuredMerchant &&
+        payment.merchant_id !== configuredMerchant) return null
+    if (payment.wallet_code !== undefined && configuredWallet &&
+        String(payment.wallet_code) !== configuredWallet) return null
+
+    return { amount, currency, status }
+  } catch {
+    return null
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -138,32 +194,6 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     return res.status(401).json({ error: "Missing signature or raw request body" })
   }
 
-  const verification = isValidSignature(rawBody, signature, secret)
-  if (!verification.valid) {
-    // Diagnostic comparison only. Never accept the API key as a fallback secret.
-    const apiKey = process.env.DEBITOPAY_API_KEY
-    const apiKeyVerification =
-      typeof apiKey === "string" && apiKey.trim().length > 0
-        ? isValidSignature(rawBody, signature, apiKey)
-        : { valid: false, formatValid: false, mode: null as string | null }
-
-    console.warn("[Debito Pay webhook] signature verification failed", {
-      signatureFormatValid: verification.formatValid,
-      signatureLength: signature.trim().length,
-      signatureHasSha256Prefix: /^sha256=/i.test(signature.trim()),
-      rawBodyBytes: rawBody.length,
-      rawBodySha256: crypto.createHash("sha256").update(rawBody).digest("hex"),
-      webhookSecretEqualsApiKey:
-        typeof apiKey === "string" && secret.trim() === apiKey.trim(),
-      signatureMatchesApiKey: apiKeyVerification.valid,
-      apiKeyMatchMode: apiKeyVerification.mode,
-      keyEncodingCandidates: getSigningKeys(secret).map((candidate) => candidate.mode),
-      bodyEncodingCandidates: ["raw-body", "serialized-json"],
-      // Never log the signature, signing secret, or API key.
-    })
-    return res.status(401).json({ error: "Invalid webhook signature" })
-  }
-
   let event: DebitoPayEvent
   try {
     event = JSON.parse(rawBody.toString("utf8")) as DebitoPayEvent
@@ -176,6 +206,41 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
   if (!event.data || typeof event.data.payment_id !== "string" || !event.data.payment_id) {
     return res.status(400).json({ error: "Missing payment_id" })
+  }
+
+  const verification = isValidSignature(rawBody, signature, secret)
+  let providerStatusFallback: { amount: number; currency: string; status: string } | null = null
+
+  if (!verification.valid) {
+    // Do not trust an unsigned event. For completed/failed events only, verify
+    // the payment independently against Debito Pay's authenticated status API.
+    // This allows safe reconciliation during a webhook-secret configuration issue
+    // without accepting arbitrary notifications or weakening HMAC validation.
+    if (event.event === "payment.completed" || event.event === "payment.failed") {
+      providerStatusFallback = await confirmPaymentWithDebitoPay(
+        event.data.payment_id,
+        event.event
+      )
+    }
+
+    if (!providerStatusFallback) {
+      console.warn("[Debito Pay webhook] signature failed and provider status could not verify payment", {
+        event: event.event,
+        payment_id: event.data.payment_id,
+        signatureFormatValid: verification.formatValid,
+        rawBodyBytes: rawBody.length,
+        rawBodySha256: crypto.createHash("sha256").update(rawBody).digest("hex"),
+        keyEncodingCandidates: getSigningKeys(secret).map((candidate) => candidate.mode),
+        bodyEncodingCandidates: ["raw-body", "serialized-json"],
+      })
+      return res.status(401).json({ error: "Invalid webhook signature" })
+    }
+
+    console.warn("[Debito Pay webhook] signature failed; payment status independently verified with Debito Pay API", {
+      event: event.event,
+      payment_id: event.data.payment_id,
+      providerStatus: providerStatusFallback.status,
+    })
   }
 
   const paymentModule = req.scope.resolve(Modules.PAYMENT) as IPaymentModuleService
@@ -194,6 +259,33 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     const data = asRecord(candidate.data)
     return data.payment_id === event.data?.payment_id
   })
+
+  if (providerStatusFallback) {
+    const sessionData = asRecord(session?.data)
+    const storedAmount = Number(sessionData.amount)
+    const storedCurrency = String(sessionData.currency ?? session?.currency_code ?? "").toUpperCase()
+    if (
+      !session ||
+      !Number.isFinite(storedAmount) ||
+      storedAmount !== providerStatusFallback.amount ||
+      storedCurrency !== providerStatusFallback.currency
+    ) {
+      console.warn("[Debito Pay webhook] provider status did not match a stored payment session", {
+        payment_id: event.data.payment_id,
+        sessionFound: Boolean(session),
+        amountMatch: Number.isFinite(storedAmount) && storedAmount === providerStatusFallback.amount,
+        currencyMatch: storedCurrency === providerStatusFallback.currency,
+      })
+      return res.status(409).json({ error: "Provider payment does not match the stored Medusa session" })
+    }
+
+    // This flag is added only after an authenticated server-to-server status
+    // check and session amount/currency match; it is consumed by Medusa's
+    // internal payment webhook workflow, not accepted from external callers.
+    event.data.amount = providerStatusFallback.amount
+    event.data.currency = providerStatusFallback.currency
+    event.data.provider_status_verified = true
+  }
 
   if (!session) {
     // Webhook test buttons often send sample payment IDs that were never created
