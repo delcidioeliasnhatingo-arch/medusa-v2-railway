@@ -37,6 +37,22 @@ function isValidSignature(rawBody: string, signature: string, secret: string) {
 }
 
 /**
+ * GET /webhooks/debitopay
+ *
+ * Lightweight health check for a browser/manual endpoint check. This does not
+ * validate the Debito Pay signing secret or prove that a signed POST succeeds.
+ */
+export async function GET(_req: MedusaRequest, res: MedusaResponse) {
+  return res.status(200).json({
+    endpoint: "debitopay-webhook",
+    status: "online",
+    accepts: "POST",
+    signatureHeader: "x-webhook-signature",
+    note: "Send a signed Debito Pay webhook POST to deliver payment events.",
+  })
+}
+
+/**
  * POST /webhooks/debitopay
  *
  * This endpoint authenticates and acknowledges Debito Pay notifications.
