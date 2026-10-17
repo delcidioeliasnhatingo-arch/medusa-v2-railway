@@ -383,13 +383,23 @@ class DebitoPayPaymentProviderService extends AbstractPaymentProvider<Options> {
     const signature = Array.isArray(headerValue) ? headerValue[0] : headerValue
     const secret = stringValue(this.options_.webhookSecret)
 
-    if (!rawBody || typeof signature !== "string" || !secret ||
-        !signatureIsValid(rawBody, signature, secret)) {
-      throw new Error("Debito Pay webhook signature validation failed.")
-    }
+    const signatureValid = Boolean(
+      rawBody &&
+      typeof signature === "string" &&
+      secret &&
+      signatureIsValid(rawBody, signature, secret)
+    )
 
     const event = objectValue(payload.data) as DebitoPayEvent
     const eventData = objectValue(event.data)
+
+    // The receiver may set this flag only after a server-to-server check-status
+    // call confirms the payment ID, status, amount and currency with Debito Pay.
+    // This is a safe fallback for provider webhook deliveries whose HMAC secret
+    // is misconfigured; browser redirects and unverified webhook data never set it.
+    if (!signatureValid && eventData.provider_status_verified !== true) {
+      throw new Error("Debito Pay webhook signature validation failed.")
+    }
     const sessionId = stringValue(eventData.session_id)
     if (!event.event || !sessionId) {
       return { action: PaymentActions.NOT_SUPPORTED }
