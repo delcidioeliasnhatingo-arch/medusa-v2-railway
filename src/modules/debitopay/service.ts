@@ -260,11 +260,6 @@ class DebitoPayPaymentProviderService extends AbstractPaymentProvider<DebitoPayO
       )
     }
 
-    const minimum = method === "emola" || method === "visa_mastercard"
-      ? 50
-      : method === "payfast"
-        ? 5
-        : 10
     return method
   }
 
