@@ -123,13 +123,14 @@ class DebitoPayPaymentProviderService extends AbstractPaymentProvider<Options> {
     return `${cleanBase}/${cleanEndpoint}`
   }
 
-  private async post(body: JsonObject): Promise<JsonObject> {
+  private async post(body: JsonObject, idempotencyKey?: string): Promise<JsonObject> {
     const response = await fetch(this.getEndpoint(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.options_.apiKey}`,
         "Content-Type": "application/json",
         Accept: "application/json",
+        ...(idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : {}),
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15_000),
@@ -246,11 +247,7 @@ class DebitoPayPaymentProviderService extends AbstractPaymentProvider<Options> {
     if (returnUrl) request.return_url = returnUrl
     if (customerName) request.customer_name = customerName
     if (customerEmail) request.customer_email = customerEmail
-    if (input.context?.idempotency_key) {
-      request.reference = input.context.idempotency_key
-    }
-
-    const response = await this.post(request)
+    const response = await this.post(request, input.context?.idempotency_key)
     const payment = this.unwrapPayment(response)
     const paymentId = this.externalPaymentId(payment)
     if (!paymentId) {
