@@ -230,12 +230,27 @@ class DebitoPayPaymentProviderService extends AbstractPaymentProvider<DebitoPayO
       ? data.payment_method.toLowerCase()
       : undefined
     const configured = (this.options_.paymentMethod || "auto").toLowerCase()
-    const method = requested || (configured !== "auto" ? configured : currencyCode === "ZAR" ? "payfast" : "visa_mastercard")
+    const method = requested || (
+      configured !== "auto"
+        ? configured
+        : currencyCode === "ZAR"
+          ? "payfast"
+          : currencyCode === "MZN"
+            ? "visa_mastercard"
+            : ""
+    )
 
     if (!ALLOWED_PAYMENT_METHODS.has(method)) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
-        "Unsupported Debito Pay method. Use mpesa, emola, mkesh, visa_mastercard, or payfast."
+        "Unsupported Debito Pay currency or method. Use MZN with mpesa/emola/mkesh/visa_mastercard, or ZAR with payfast."
+      )
+    }
+
+    if (["mpesa", "emola", "mkesh", "visa_mastercard"].includes(method) && currencyCode !== "MZN") {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Debito Pay ${method} supports MZN payments only.`
       )
     }
     if (method === "payfast" && currencyCode !== "ZAR") {
@@ -244,6 +259,12 @@ class DebitoPayPaymentProviderService extends AbstractPaymentProvider<DebitoPayO
         "Debito Pay PayFast requires a ZAR payment session."
       )
     }
+
+    const minimum = method === "emola" || method === "visa_mastercard"
+      ? 50
+      : method === "payfast"
+        ? 5
+        : 10
     return method
   }
 
@@ -283,6 +304,17 @@ class DebitoPayPaymentProviderService extends AbstractPaymentProvider<DebitoPayO
     }
 
     const paymentMethod = this.chooseMethod(data, currencyCode)
+    const minimumAmount = paymentMethod === "emola" || paymentMethod === "visa_mastercard"
+      ? 50
+      : paymentMethod === "payfast"
+        ? 5
+        : 10
+    if (amount < minimumAmount) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Debito Pay ${paymentMethod} minimum payment amount is ${minimumAmount} ${currencyCode}.`
+      )
+    }
     const customer = input.context?.customer
     const customerName = [customer?.first_name, customer?.last_name].filter(Boolean).join(" ").trim()
     const phone = typeof data.phone === "string" ? data.phone : customer?.phone
