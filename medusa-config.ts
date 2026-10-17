@@ -84,5 +84,28 @@ module.exports = defineConfig({
       : process.env.MEDUSA_WORKER_MODE === 'worker',
     backendUrl: process.env.MEDUSA_BACKEND_URL || undefined,
   },
-  modules: redisModules,
+  modules: [
+    ...redisModules,
+    {
+      resolve: "@medusajs/medusa/payment",
+      options: {
+        providers: [
+          {
+            resolve: "./src/modules/debitopay",
+            id: "debitopay",
+            options: {
+              apiKey: process.env.DEBITOPAY_API_KEY,
+              merchantId: process.env.DEBITOPAY_MERCHANT_ID,
+              walletCode: process.env.DEBITOPAY_WALLET_CODE,
+              apiBaseUrl: process.env.DEBITOPAY_API_BASE_URL,
+              paymentEndpoint: process.env.DEBITOPAY_PAYMENT_ENDPOINT,
+              paymentMethod: process.env.DEBITOPAY_PAYMENT_METHOD || "auto",
+              returnUrl: process.env.DEBITOPAY_RETURN_URL,
+              webhookSecret: process.env.DEBITOPAY_WEBHOOK_SECRET,
+            },
+          },
+        ],
+      },
+    },
+  ],
 })
