@@ -95,9 +95,19 @@ function signatureIsValid(rawBody: Buffer, signature: string, secret: string): b
   const normalized = normaliseSignature(signature)
   if (!normalized) return false
 
-  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest()
   const actual = Buffer.from(normalized, "hex")
-  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected)
+  const candidates = [rawBody]
+  try {
+    const parsed = JSON.parse(rawBody.toString("utf8"))
+    candidates.push(Buffer.from(JSON.stringify(parsed), "utf8"))
+  } catch {
+    // Non-JSON webhook payloads can only use the exact raw bytes.
+  }
+
+  return candidates.some((body) => {
+    const expected = crypto.createHmac("sha256", secret).update(body).digest()
+    return actual.length === expected.length && crypto.timingSafeEqual(actual, expected)
+  })
 }
 
 class DebitoPayPaymentProviderService extends AbstractPaymentProvider<Options> {
