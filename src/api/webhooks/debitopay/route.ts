@@ -136,14 +136,28 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   const verification = isValidSignature(rawBody, signature, secret)
   if (!verification.valid) {
+    // Diagnostic only: compare with the API key without ever accepting it as a
+    // fallback signing key. The documented contract requires the dedicated
+    // webhook signing secret, not the payment API key.
+    const apiKey = process.env.DEBITOPAY_API_KEY
+    const apiKeyVerification =
+      typeof apiKey === "string" && apiKey.trim().length > 0
+        ? isValidSignature(rawBody, signature, apiKey)
+        : { valid: false, formatValid: false, mode: null as string | null }
+
     console.warn("[Debito Pay webhook] signature verification failed", {
       signatureFormatValid: verification.formatValid,
       signatureLength: signature.trim().length,
+      signatureHasSha256Prefix: /^sha256=/i.test(signature.trim()),
       rawBodyBytes: rawBody.length,
       rawBodySha256: crypto.createHash("sha256").update(rawBody).digest("hex"),
+      webhookSecretEqualsApiKey:
+        typeof apiKey === "string" && secret.trim() === apiKey.trim(),
+      signatureMatchesApiKey: apiKeyVerification.valid,
+      apiKeyMatchMode: apiKeyVerification.mode,
       keyEncodingCandidates: getSigningKeys(secret).map((candidate) => candidate.mode),
       bodyEncodingCandidates: ["raw-body", "serialized-json"],
-      // Never log the signature or signing secret.
+      // Never log the signature, signing secret, or API key.
     })
     return res.status(401).json({ error: "Invalid webhook signature" })
   }
