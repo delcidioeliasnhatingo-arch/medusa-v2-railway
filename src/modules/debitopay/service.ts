@@ -101,7 +101,7 @@ function toNumber(value: unknown): number {
   return Number.NaN
 }
 
-function mapStatus(status: unknown): string {
+function mapStatus(status: unknown): PaymentSessionStatus {
   const value = String(status ?? "pending").toLowerCase()
   if (["success", "successful", "completed", "paid", "captured"].includes(value)) {
     return PaymentSessionStatus.CAPTURED
@@ -460,12 +460,12 @@ class DebitoPayPaymentProviderService extends AbstractPaymentProvider<DebitoPayO
     const response = await this.checkStatus(input.data)
     const status = mapStatus(response.payment?.status ?? response.status)
     if (status === PaymentSessionStatus.CAPTURED) {
-      return { status: PaymentSessionStatus.CAPTURED, data: response.payment as Record<string, unknown> }
+      return { status: PaymentSessionStatus.CAPTURED, data: (response.payment ?? {}) as Record<string, unknown> }
     }
     if (status === PaymentSessionStatus.ERROR || status === PaymentSessionStatus.CANCELED) {
-      return { status: status as typeof PaymentSessionStatus.ERROR, data: response.payment as Record<string, unknown> }
+      return { status, data: (response.payment ?? {}) as Record<string, unknown> }
     }
-    return { status: PaymentSessionStatus.PENDING, data: response.payment as Record<string, unknown> }
+    return { status: PaymentSessionStatus.PENDING, data: (response.payment ?? {}) as Record<string, unknown> }
   }
 
   async getWebhookActionAndData(
