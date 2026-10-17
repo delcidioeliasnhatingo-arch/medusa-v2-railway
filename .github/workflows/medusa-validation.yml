@@ -1,0 +1,42 @@
+name: Medusa validation
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_ENV: production
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/medusa_ci
+      REDIS_URL: redis://127.0.0.1:6379
+      MEDUSA_WORKER_MODE: server
+      STORE_CORS: http://localhost:3000
+      ADMIN_CORS: http://localhost:9000
+      AUTH_CORS: http://localhost:3000,http://localhost:9000
+      JWT_SECRET: github-actions-only-jwt-secret-not-for-production
+      COOKIE_SECRET: github-actions-only-cookie-secret-not-for-production
+      DISABLE_MEDUSA_ADMIN: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Test webhook signature verification
+        run: npm test
+      - name: Type-check TypeScript
+        run: npm run typecheck
+      - name: Build Medusa
+        run: npm run build

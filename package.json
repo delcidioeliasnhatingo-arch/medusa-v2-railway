@@ -20,7 +20,9 @@
     "dev": "medusa develop",
     "lint": "medusa lint",
     "predeploy": "medusa db:migrate",
-    "seed": "medusa seed ./src/migration-scripts/initial-data-seed.ts"
+    "seed": "medusa seed ./src/migration-scripts/initial-data-seed.ts",
+    "test": "node -r ts-node/register --test tests/*.test.cjs",
+    "typecheck": "tsc --noEmit --pretty false"
   },
   "dependencies": {
     "@medusajs/admin-sdk": "2.20.1",
