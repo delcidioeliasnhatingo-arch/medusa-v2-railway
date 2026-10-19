@@ -1,42 +1,55 @@
 # AVEART Medusa backend
 
-Medusa v2 backend for AVEART, with a Debito Pay payment provider and webhook handler.
+Medusa v2 backend for AVEART, using Neon PostgreSQL and the custom Debito Pay payment provider.
 
-## Deployment target
+## Confirmed Neon setup
 
-- **Database:** Neon PostgreSQL, project `AveartBackend`, branch `production`.
-- **Application runtime:** Docker-capable web host (Render configuration is in `render.yaml`).
-- **Admin:** served at `/app`.
-- **Health:** `/health`.
-- **Store API:** `/store/*`; requests to protected store endpoints need the Medusa publishable API key in `x-publishable-api-key`.
-- **Debito Pay webhook:** `/webhooks/debitopay`.
+- Neon account: **NHatingo** (secondary account; do not switch to Primary).
+- Neon project: `AveartBackend`.
+- Database: `neondb`.
+- Production branch: `production` — preserve it until staging validation passes.
+- Staging branch: `aveart-medusa-staging` — use this branch for first migrations and tests.
+- Medusa Admin: `/app`.
+- Health endpoint: `/health`.
+- Store API: `/store/*`; protected Store API requests require `x-publishable-api-key`.
+- Debito Pay webhook: `/webhooks/debitopay`.
 
-Neon is the PostgreSQL database service; it does not execute the Medusa Node.js server itself.
+## Important hosting boundary
 
-## Required environment variables
+Neon is the PostgreSQL database service. It does **not** host the complete Medusa server, its Admin dashboard, or a persistent Node.js process. The Dockerfile in this repository packages the Medusa application, but it still needs a compatible application runtime to run. Do not deploy Medusa as if a Neon database URL were an application URL, and do not point the storefront directly at Neon.
 
-Configure these as secrets/variables in the application host, not in Git:
+## Neon connection configuration
 
-- `DATABASE_URL`: Neon connection string for the `AveartBackend` production branch.
-- `JWT_SECRET`, `COOKIE_SECRET`: unique, strong production secrets.
-- `MEDUSA_ADMIN_PASSWORD`: strong admin password.
-- `ADMIN_CORS`, `AUTH_CORS`, `STORE_CORS`: exact HTTPS origins for the backend/admin and storefront.
+Set `DATABASE_URL` to the PostgreSQL connection string copied from the **NHatingo → AveartBackend → aveart-medusa-staging** branch for staging. Keep the connection string in the runtime's secret/environment settings only; never commit it to Git. Use the production branch's URL only after staging tests pass.
+
+For a staging migration run from GitHub Actions, add a repository Actions secret named `NEON_STAGING_DATABASE_URL` containing the staging branch's connection string. The workflow `.github/workflows/neon-staging-migrate.yml` is manual-only and never targets production.
+
+## Required runtime variables
+
+- `DATABASE_URL`: Neon PostgreSQL connection string for the selected branch.
+- `JWT_SECRET`, `COOKIE_SECRET`: unique, strong secrets.
+- `MEDUSA_ADMIN_EMAIL`: `delcidioeliasnhatingo@gmail.com`.
+- `MEDUSA_ADMIN_PASSWORD`: strong password; never store it in source control.
+- `ADMIN_CORS`, `AUTH_CORS`, `STORE_CORS`: exact HTTPS origins for the admin, auth clients and storefront.
 - `DEBITOPAY_API_KEY`, `DEBITOPAY_MERCHANT_ID`, `DEBITOPAY_WALLET_CODE`, `DEBITOPAY_WEBHOOK_SECRET`: values from the Debito Pay merchant dashboard.
+- `DEBITOPAY_RETURN_URL`: the real storefront return URL.
+- `PORT`: normally `9000`.
+- `MEDUSA_WORKER_MODE`: `shared` for a single-instance server.
+- `MIGRATE_ON_BOOT`: only enable when the runtime is configured to run migrations safely.
 
-`REDIS_URL` is optional for a single-instance low-cost deployment. Without Redis, Medusa uses in-memory event/workflow/cache/locking defaults. This is not the recommended topology for multiple replicas or high-volume production.
+`REDIS_URL` is optional for a small single-instance test deployment. Without it, Medusa uses in-memory event/workflow/cache/locking implementations, which are not suitable for horizontally scaled production.
 
-## First deployment checklist
+## Staging validation sequence
 
-1. Add the Neon connection string as `DATABASE_URL` in the host's secret environment variables.
-2. Set all CORS origins to the actual AVEART storefront and backend HTTPS URLs.
-3. Set a strong admin password and Debito Pay secrets in the host dashboard.
-4. Deploy the Docker service. On first boot, `start.sh` waits for PostgreSQL and runs `medusa db:migrate`.
-5. Verify `/health`, sign in at `/app`, create a publishable API key, and configure the sales channel/region/payment provider.
-6. Register the Debito Pay webhook URL as `https://<backend-domain>/webhooks/debitopay`.
-7. Test a real sandbox payment session end-to-end. A successful webhook health check alone does not prove payment reconciliation.
+1. Configure the staging connection string in the runtime or GitHub Actions secret store.
+2. Run the manual Neon staging migration workflow.
+3. Start the Medusa application on a compatible Node.js/Docker runtime with staging variables.
+4. Verify `/health`, Admin at `/app`, Store API with the publishable API key, products, region, sales channel, and payment provider.
+5. Test Debito Pay in sandbox, including signed webhook delivery and payment reconciliation.
+6. Only after all checks pass, plan the production migration separately.
 
-## Safety notes
+## Safety
 
-- Never commit `.env`, database passwords, payment API keys, webhook secrets, or admin passwords.
-- Do not run migrations against a production database until the correct Neon project/branch is confirmed.
-- The initial Neon project should be treated as a fresh database unless a read-only inspection confirms otherwise.
+- No production database migration should run until staging has passed validation.
+- Do not commit `.env`, Neon URLs/passwords, payment keys, webhook secrets or admin passwords.
+- Never treat a webhook health-check GET as proof that payment webhook signatures and reconciliation work.
