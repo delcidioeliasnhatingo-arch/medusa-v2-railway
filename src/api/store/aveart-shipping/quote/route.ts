@@ -27,12 +27,33 @@ type QuoteBody = {
   declared_value?: number
 }
 
+type ProviderRate = {
+  rate?: number | string
+  service_level?: {
+    code?: string
+    name?: string
+    id?: number | string
+    delivery_date_from?: string
+    delivery_date_to?: string
+    collection_date?: string
+  }
+  service_level_code?: string
+  service_level_name?: string
+  service_level_id?: number | string
+  estimated_collection?: string
+  estimated_delivery_from?: string
+  estimated_delivery_to?: string
+}
+
 function validAddress(value: unknown): value is Address {
   if (!value || typeof value !== "object") return false
   const a = value as Record<string, unknown>
   return ["street_address", "city", "zone", "code"].every(
     (key) => typeof a[key] === "string" && (a[key] as string).trim().length > 0
-  ) && a.country === "ZA"
+  ) && a.country === "ZA" &&
+    (a.type === undefined || ["residential", "business", "unknown"].includes(String(a.type))) &&
+    (a.lat === undefined || (typeof a.lat === "number" && Number.isFinite(a.lat))) &&
+    (a.lng === undefined || (typeof a.lng === "number" && Number.isFinite(a.lng)))
 }
 
 function validParcels(value: unknown): value is Parcel[] {
@@ -43,6 +64,25 @@ function validParcels(value: unknown): value is Parcel[] {
       return ["submitted_length_cm", "submitted_width_cm", "submitted_height_cm", "submitted_weight_kg"]
         .every((key) => typeof p[key] === "number" && Number.isFinite(p[key]) && (p[key] as number) > 0)
     })
+}
+
+function normalizeRates(payload: unknown) {
+  if (!payload || typeof payload !== "object") return []
+  const object = payload as { rates?: unknown }
+  const rates = Array.isArray(object.rates) ? object.rates : Array.isArray(payload) ? payload : []
+  return (rates as ProviderRate[]).flatMap((item) => {
+    const amount = Number(item?.rate)
+    if (!Number.isFinite(amount) || amount < 0) return []
+    return [{
+      service_code: String(item.service_level?.code ?? item.service_level_code ?? ""),
+      service_name: String(item.service_level?.name ?? item.service_level_name ?? "Entrega"),
+      service_id: item.service_level?.id ?? item.service_level_id ?? null,
+      amount_zar: amount,
+      estimated_collection: item.service_level?.collection_date ?? item.estimated_collection ?? null,
+      estimated_delivery_from: item.service_level?.delivery_date_from ?? item.estimated_delivery_from ?? null,
+      estimated_delivery_to: item.service_level?.delivery_date_to ?? item.estimated_delivery_to ?? null,
+    }]
+  }).sort((a, b) => a.amount_zar - b.amount_zar)
 }
 
 export async function POST(req: MedusaRequest<QuoteBody>, res: MedusaResponse) {
@@ -86,20 +126,37 @@ export async function POST(req: MedusaRequest<QuoteBody>, res: MedusaResponse) {
       signal: AbortSignal.timeout(15000),
     })
 
-    const payload = await response.json().catch(() => null)
+    const payload: unknown = await response.json().catch(() => null)
     if (!response.ok) {
-      // Do not expose provider credentials or raw upstream diagnostics to storefront users.
-      return res.status(response.status === 401 || response.status === 403 ? 502 : 502).json({
+      return res.status(502).json({
         code: "shipping_provider_error",
         message: "A transportadora não conseguiu fornecer uma cotação. Verifique a conta, os endereços e as credenciais.",
+      })
+    }
+
+    const rates = normalizeRates(payload)
+    if (!rates.length) {
+      return res.status(502).json({
+        code: "shipping_rates_unavailable",
+        message: "A transportadora respondeu, mas não devolveu tarifas utilizáveis para esta rota.",
       })
     }
 
     return res.status(200).json({
       provider: "shiplogic",
       currency_code: "zar",
-      quote: payload,
-      pricing_note: "Cotação real da transportadora; ainda não é uma alteração do preço do produto.",
+      collection_postal_code: body.collection_address.code,
+      delivery_postal_code: body.delivery_address.code,
+      billable_parcels: body.parcels.map((parcel) => ({
+        weight_kg: parcel.submitted_weight_kg,
+        dimensions_cm: {
+          length: parcel.submitted_length_cm,
+          width: parcel.submitted_width_cm,
+          height: parcel.submitted_height_cm,
+        },
+      })),
+      rates,
+      pricing_note: "Estas são cotações da transportadora para a rota indicada. Não alteram automaticamente os preços do catálogo.",
     })
   } catch {
     return res.status(502).json({
