@@ -1,18 +1,16 @@
 {
-  "name": "medusa-railway",
+  "name": "aveart-medusa",
   "version": "1.0.0",
-  "description": "Medusa v2 (server + worker) production template for Railway",
-  "author": "Medusa (https://medusajs.com)",
+  "description": "Medusa v2 backend for AVEART with Neon PostgreSQL and Debito Pay",
+  "author": "AVEART",
   "license": "MIT",
   "keywords": [
     "medusa",
-    "railway",
     "postgres",
-    "redis",
+    "neon",
     "typescript",
     "ecommerce",
-    "headless",
-    "worker"
+    "headless"
   ],
   "scripts": {
     "build": "medusa build",
