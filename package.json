@@ -1,5 +1,5 @@
 {
-  "name": "medusa-railway",
+  "name": "aveart-medusa",
   "version": "1.0.0",
   "description": "Medusa v2 backend for AVEART with Neon PostgreSQL and Debito Pay",
   "author": "AVEART",
