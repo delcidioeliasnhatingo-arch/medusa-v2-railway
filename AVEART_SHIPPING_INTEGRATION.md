@@ -1,25 +1,27 @@
 # AVEART — Frete sul-africano com Shiplogic / The Courier Guy
 
-## O que esta integração adiciona
+## Estado desta entrega
 
-- Endpoint público de cotação: `POST /store/aveart-shipping/quote`.
-- Consulta a API Shiplogic em `https://api.shiplogic.com/rates` usando token mantido no servidor.
-- Exige endereço de recolha do fornecedor, endereço de entrega na África do Sul e volumes com peso e dimensões.
-- Devolve a resposta original de tarifas da transportadora em ZAR.
-- Valida os campos recebidos e não expõe o token nem as mensagens técnicas da API ao cliente.
-- Não cria envios, etiquetas ou cobranças; apenas consulta tarifas.
+- Endpoint implementado: `POST /store/aveart-shipping/quote`.
+- Consulta a API Shiplogic em `https://api.shiplogic.com/rates`.
+- Valida origem e destino sul-africanos e 1–20 volumes com dimensões em cm e peso em kg.
+- Normaliza as tarifas e devolve os serviços ordenados pelo preço em ZAR.
+- Não devolve a resposta técnica integral do fornecedor nem expõe o token.
+- Não cria etiquetas, não agenda recolhas e não altera preços de produtos.
 
-## Variável necessária no Render
+## Ativar no Render
 
-Adicionar ao serviço Medusa:
+Adicionar a variável ao serviço Medusa correto:
 
 ```env
-SHIPLOGIC_API_TOKEN=<token de API da conta Shiplogic/The Courier Guy>
+SHIPLOGIC_API_TOKEN=<token da conta Shiplogic / The Courier Guy>
 ```
 
-Obter o token no portal da transportadora/Shiplogic. A conta de teste e a conta de produção podem usar tokens/contas diferentes. Não colocar o token no frontend, no GitHub ou em variáveis `NEXT_PUBLIC_*`.
+Obter o token diretamente no portal/apoio da transportadora. Não enviar o token por chat, não o colocar no GitHub e não o incluir no frontend. O token de teste e o token de produção podem corresponder a contas diferentes.
 
 ## Pedido de teste
+
+Guardar como `quote-test.json`:
 
 ```json
 {
@@ -54,7 +56,7 @@ Obter o token no portal da transportadora/Shiplogic. A conta de teste e a conta 
 }
 ```
 
-Exemplo de chamada (substituir a chave publicável e o domínio):
+Executar depois do deploy, substituindo o domínio e a chave publicável:
 
 ```bash
 curl -X POST "https://aveart-medusa-api.onrender.com/store/aveart-shipping/quote" \
@@ -63,15 +65,18 @@ curl -X POST "https://aveart-medusa-api.onrender.com/store/aveart-shipping/quote
   --data @quote-test.json
 ```
 
-## Como incorporar o frete nos preços dos produtos
+Resposta esperada em caso de sucesso: `provider`, `currency_code: "zar"`, códigos postais e uma lista `rates` com `service_code`, `service_name`, `amount_zar` e datas estimadas quando fornecidas pela transportadora. O formato real depende da conta/API e tem de ser confirmado com uma cotação autorizada.
 
-A origem varia por fornecedor e o custo muda conforme destino, peso faturável, volume, serviço e sobretaxas. Por isso, não se deve adicionar um número fixo inventado a todos os produtos.
+## Política de frete incluído no preço
 
-Próxima fase recomendada:
-1. Guardar origem/código postal e dimensões embaladas em cada variante/fornecedor.
-2. Consultar tarifas reais para uma amostra representativa de destinos sul-africanos.
-3. Calcular a média/percentil de segurança por origem e perfil de embalagem.
-4. Aprovar a regra comercial (média nacional ou preço por zona) e só então atualizar preços de catálogo em lote.
-5. Manter a resposta de cotação disponível para auditoria e rever os preços periodicamente.
+A AVEART vende com o frete estimado incorporado no preço do artigo. Como a origem muda por fornecedor e a tarifa muda por destino, não é seguro atualizar o catálogo com uma taxa fixa inventada.
 
-**Limitação atual:** este commit implementa a consulta de tarifas, não altera automaticamente os preços de produtos. Para fazer isso com segurança ainda precisamos de uma conta/API ativa e dados reais de origem, peso e dimensões dos fornecedores. Sem token válido, o endpoint responde `503 shipping_provider_not_configured` em vez de inventar tarifas.
+Fluxo necessário antes da alteração em massa:
+1. Registar no catálogo os dados reais de expedição de cada fornecedor: endereço/código postal, peso embalado e dimensões embaladas.
+2. Definir uma amostra de destinos que represente as zonas onde a loja vende.
+3. Consultar tarifas reais para os perfis de embalagem e rotas da amostra.
+4. Calcular uma média ponderada ou percentil de segurança para cada perfil/origem, documentando o método e os suplementos incluídos.
+5. Aplicar o frete estimado aos preços-base apenas depois de confirmar a regra comercial, os preços atuais e as margens.
+6. Rever a tabela periodicamente; encomendas extraordinárias e envios múltiplos podem precisar de tratamento específico.
+
+**Bloqueios para concluir a ativação real:** token Shiplogic válido, autorização para selecionar o workspace Render correto, endereço de origem real por fornecedor e dimensões/pesos reais dos produtos. Sem estes dados, o endpoint responde com erro explícito em vez de inventar uma tarifa ou modificar preços incorretamente.
