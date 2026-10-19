@@ -36,7 +36,7 @@ if [ "$MODE" = "worker" ]; then
 const { Client } = require("pg");
 const c = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 c.connect()
-  .then(() => c.query("SELECT to_regclass(\'public.payment_provider\') IS NOT NULL AS ok"))
+  .then(() => c.query("SELECT to_regclass($$public.payment_provider$$) IS NOT NULL AS ok"))
   .then((r) => { const ok = r.rows[0] && r.rows[0].ok; return c.end().then(() => process.exit(ok ? 0 : 1)); })
   .catch(() => process.exit(1));
 ' 2>/dev/null; do
