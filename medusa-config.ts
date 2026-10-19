@@ -1,44 +1,29 @@
-import { loadEnv, defineConfig } from '@medusajs/framework/utils'
+import { loadEnv, defineConfig } from "@medusajs/framework/utils"
 
-loadEnv(process.env.NODE_ENV || 'development', process.cwd())
+loadEnv(process.env.NODE_ENV || "development", process.cwd())
 
-/**
- * Railway's internal Redis proxy resolves to an IPv6 address. ioredis dials
- * IPv6 first and can silently hang when the host only answers on IPv4.
- * Appending `family=0` makes Node try both families (Happy Eyeballs), which
- * is the reliable default on Railway. Idempotent: existing `family=` wins.
- */
-const normalizeRedisUrl = (url?: string): string | undefined => {
-  if (!url) return url
-  if (/([?&])family=/.test(url)) return url
-  return url + (url.includes('?') ? '&' : '?') + 'family=0'
-}
+// Redis is optional for a small single-instance deployment. When REDIS_URL is
+// configured, Medusa uses Redis-backed events, workflows, caching and locks.
+// Without it, Medusa uses its built-in in-memory implementations.
+const redisUrl = process.env.REDIS_URL
 
-const redisUrl = normalizeRedisUrl(process.env.REDIS_URL)
-
-// Production modules (event bus, workflow engine, cache, locks) all run on
-// Redis so that a `server` deployment and a `worker` deployment share events
-// and state. Without REDIS_URL (local dev) Medusa falls back to the in-memory
-// defaults, so `npm run dev` works with no extra services.
 const redisModules = redisUrl
   ? [
       {
-        resolve: '@medusajs/medusa/event-bus-redis',
+        resolve: "@medusajs/medusa/event-bus-redis",
         options: { redisUrl },
       },
       {
-        resolve: '@medusajs/medusa/workflow-engine-redis',
-        options: {
-          redis: { redisUrl },
-        },
+        resolve: "@medusajs/medusa/workflow-engine-redis",
+        options: { redis: { redisUrl } },
       },
       {
-        resolve: '@medusajs/medusa/caching',
+        resolve: "@medusajs/medusa/caching",
         options: {
           providers: [
             {
-              resolve: '@medusajs/caching-redis',
-              id: 'caching-redis',
+              resolve: "@medusajs/caching-redis",
+              id: "caching-redis",
               is_default: true,
               options: { redisUrl },
             },
@@ -46,12 +31,12 @@ const redisModules = redisUrl
         },
       },
       {
-        resolve: '@medusajs/medusa/locking',
+        resolve: "@medusajs/medusa/locking",
         options: {
           providers: [
             {
-              resolve: '@medusajs/medusa/locking-redis',
-              id: 'locking-redis',
+              resolve: "@medusajs/medusa/locking-redis",
+              id: "locking-redis",
               is_default: true,
               options: { redisUrl },
             },
@@ -65,24 +50,19 @@ module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     redisUrl,
-    workerMode: process.env.MEDUSA_WORKER_MODE as 'shared' | 'server' | 'worker',
+    workerMode: process.env.MEDUSA_WORKER_MODE as "shared" | "server" | "worker",
     http: {
-      // Defaults keep local dev and zero-config deploys working; set STORE_CORS
-      // to your storefront origin(s) in production.
-      storeCors: process.env.STORE_CORS || 'http://localhost:3000,http://localhost:8000',
-      adminCors: process.env.ADMIN_CORS!,
-      authCors: process.env.AUTH_CORS!,
+      storeCors: process.env.STORE_CORS || "http://localhost:3000,http://localhost:8000",
+      adminCors: process.env.ADMIN_CORS || "http://localhost:9000",
+      authCors: process.env.AUTH_CORS || "http://localhost:3000,http://localhost:9000",
       jwtSecret: process.env.JWT_SECRET,
       cookieSecret: process.env.COOKIE_SECRET,
     },
   },
   admin: {
-    // The worker never serves or builds the admin. DISABLE_MEDUSA_ADMIN wins
-    // when set; otherwise it is derived from MEDUSA_WORKER_MODE.
     disable: process.env.DISABLE_MEDUSA_ADMIN
-      ? process.env.DISABLE_MEDUSA_ADMIN === 'true'
-      : process.env.MEDUSA_WORKER_MODE === 'worker',
-    backendUrl: process.env.MEDUSA_BACKEND_URL || undefined,
+      ? process.env.DISABLE_MEDUSA_ADMIN === "true"
+      : process.env.MEDUSA_WORKER_MODE === "worker",
   },
   modules: [
     ...redisModules,
