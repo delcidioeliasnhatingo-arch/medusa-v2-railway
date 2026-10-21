@@ -50,7 +50,7 @@ const redisModules = redisUrl
         options: {
           providers: [
             {
-              resolve: '@medusajs/medusa/locking-redis',
+              resolve: '@medusajs/medusa/locking',
               id: 'locking-redis',
               is_default: true,
               options: { redisUrl },
@@ -61,11 +61,26 @@ const redisModules = redisUrl
     ]
   : []
 
+const sessionLifetimeMs = 24 * 60 * 60 * 1000
+
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     redisUrl,
     workerMode: process.env.MEDUSA_WORKER_MODE as 'shared' | 'server' | 'worker',
+    // Keep admin sessions valid for 24 hours.
+    sessionOptions: {
+      ttl: sessionLifetimeMs,
+      rolling: true,
+      resave: true,
+      saveUninitialized: true,
+    },
+    cookieOptions: {
+      maxAge: sessionLifetimeMs,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+    },
     http: {
       // Defaults keep local dev and zero-config deploys working; set STORE_CORS
       // to your storefront origin(s) in production.
