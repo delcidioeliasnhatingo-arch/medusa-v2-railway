@@ -89,15 +89,7 @@ module.exports = defineConfig({
       resave: true,
       saveUninitialized: true,
     },
-    http: {
-      // Defaults keep local dev and zero-config deploys working; set STORE_CORS
-      // to your storefront origin(s) in production.
-      storeCors: process.env.STORE_CORS || 'http://localhost:3000,http://localhost:8000',
-      adminCors: process.env.ADMIN_CORS!,
-      authCors: process.env.AUTH_CORS!,
-      jwtSecret: process.env.JWT_SECRET,
-      cookieSecret: process.env.COOKIE_SECRET,
-    },
+
   },
   admin: {
     // The worker never serves or builds the admin. DISABLE_MEDUSA_ADMIN wins
