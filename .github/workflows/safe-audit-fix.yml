@@ -1,0 +1,75 @@
+name: Safe dependency audit and repair
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - aveart/za-zar-staging-seed
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/safe-audit-fix.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: safe-audit-fix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  audit-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AVEART staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: aveart/za-zar-staging-seed
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+          cache: npm
+
+      - name: Use lockfile's npm version
+        run: npm install --global npm@11.11.1
+
+      - name: Install locked dependencies
+        run: npm ci --no-fund
+
+      - name: Apply only non-breaking audit fixes
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          npm audit fix --no-fund
+          status=$?
+          echo "audit_exit_code=$status" >> "$GITHUB_OUTPUT"
+          set -e
+          npm audit --json > audit-report.json || true
+
+      - name: Build Medusa to catch incompatibilities
+        run: npm run build
+
+      - name: Commit compatible lockfile fixes
+        shell: bash
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "fix: apply compatible npm audit dependency updates"
+            git push origin HEAD:aveart/za-zar-staging-seed
+          else
+            echo "No compatible lockfile updates were available."
+          fi
+
+      - name: Summarize remaining audit status
+        if: always()
+        run: |
+          echo "npm audit fix exit code: ${{ steps.audit.outputs.audit_exit_code }}"
+          if [ -f audit-report.json ]; then
+            node -e "const r=require('./audit-report.json'); console.log(JSON.stringify({metadata:r.metadata?.vulnerabilities},null,2))"
+          fi
