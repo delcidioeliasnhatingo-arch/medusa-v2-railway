@@ -20,9 +20,9 @@ import {
 /**
  * AVEART staging-only seed.
  *
- * Safety: this script refuses to run unless AVEART_STAGING_SEED=true is set.
- * Use only against a fresh staging database. It creates test catalogue records,
- * a ZA/ZAR region, a publishable key, a sales channel and test inventory.
+ * Safety: this script is opt-in and does nothing unless AVEART_STAGING_SEED=true.
+ * Set it only on a fresh, isolated staging database. It creates test catalogue
+ * records, a ZA/ZAR region, a publishable key, a sales channel and test inventory.
  * It does not configure a live payment provider, shipping options, or suppliers.
  */
 export default async function aveart_staging_seed({
@@ -31,9 +31,10 @@ export default async function aveart_staging_seed({
   container: MedusaContainer;
 }) {
   if (process.env.AVEART_STAGING_SEED !== "true") {
-    throw new Error(
-      "Refusing to seed AVEART data. Set AVEART_STAGING_SEED=true only for a fresh staging database.",
+    console.info(
+      "[aveart-staging-seed] Skipped safely; set AVEART_STAGING_SEED=true only for a fresh isolated staging database.",
     );
+    return;
   }
 
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
