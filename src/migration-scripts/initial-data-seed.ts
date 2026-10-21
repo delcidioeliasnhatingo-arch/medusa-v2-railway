@@ -35,7 +35,7 @@ export default async function initial_data_seed({
     ModuleRegistrationName.FULFILLMENT
   );
 
-  const countries = ["gb", "de", "dk", "se", "fr", "es", "it"];
+  const countries = ["za"];
 
   logger.info("Seeding store data...");
   const {
@@ -81,12 +81,8 @@ export default async function initial_data_seed({
           name: "Default Store",
           supported_currencies: [
             {
-              currency_code: "eur",
+              currency_code: "zar",
               is_default: true,
-            },
-            {
-              currency_code: "usd",
-              is_default: false,
             },
           ],
           default_sales_channel_id: defaultSalesChannel.id,
@@ -100,8 +96,8 @@ export default async function initial_data_seed({
     input: {
       regions: [
         {
-          name: "Europe",
-          currency_code: "eur",
+          name: "South Africa",
+          currency_code: "zar",
           countries,
           payment_providers: ["pp_system_default"],
         },
@@ -127,10 +123,10 @@ export default async function initial_data_seed({
     input: {
       locations: [
         {
-          name: "European Warehouse",
+          name: "South African Warehouse",
           address: {
-            city: "Copenhagen",
-            country_code: "DK",
+            city: "Cape Town",
+            country_code: "ZA",
             address_1: "",
           },
         },
@@ -157,38 +153,14 @@ export default async function initial_data_seed({
   const shippingProfile = shippingProfileResult[0];
 
   const fulfillmentSet = await fulfillmentModuleService.createFulfillmentSets({
-    name: "European Warehouse delivery",
+    name: "South African delivery",
     type: "shipping",
     service_zones: [
       {
-        name: "Europe",
+        name: "South Africa",
         geo_zones: [
           {
-            country_code: "gb",
-            type: "country",
-          },
-          {
-            country_code: "de",
-            type: "country",
-          },
-          {
-            country_code: "dk",
-            type: "country",
-          },
-          {
-            country_code: "se",
-            type: "country",
-          },
-          {
-            country_code: "fr",
-            type: "country",
-          },
-          {
-            country_code: "es",
-            type: "country",
-          },
-          {
-            country_code: "it",
+            country_code: "za",
             type: "country",
           },
         ],
@@ -224,7 +196,7 @@ export default async function initial_data_seed({
             amount: 10,
           },
           {
-            currency_code: "eur",
+            currency_code: "zar",
             amount: 10,
           },
           {
@@ -262,7 +234,7 @@ export default async function initial_data_seed({
             amount: 10,
           },
           {
-            currency_code: "eur",
+            currency_code: "zar",
             amount: 10,
           },
           {
@@ -384,7 +356,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -402,7 +374,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -420,7 +392,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -438,7 +410,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -456,7 +428,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -474,7 +446,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -492,7 +464,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -510,7 +482,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -555,7 +527,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -572,7 +544,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -589,7 +561,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -606,7 +578,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -651,7 +623,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -668,7 +640,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -685,7 +657,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -702,7 +674,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -747,7 +719,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -764,7 +736,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -781,7 +753,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
@@ -798,7 +770,7 @@ export default async function initial_data_seed({
               prices: [
                 {
                   amount: 10,
-                  currency_code: "eur",
+                  currency_code: "zar",
                 },
                 {
                   amount: 15,
