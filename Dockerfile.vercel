@@ -1,5 +1,4 @@
 # Vercel container entrypoint for the Medusa v2 API.
-# Vercel routes HTTP requests to port 80 by default; keep PORT aligned.
 FROM node:22-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
@@ -16,6 +15,7 @@ ENV NODE_ENV=production \
     PORT=80
 
 COPY start.sh /app/start.sh
+COPY reset-admin-password.cjs /app/reset-admin-password.cjs
 RUN chmod +x /app/start.sh && mkdir -p /app/.medusa
 COPY --from=build /app/.medusa/server /app/.medusa/server
 RUN cd /app/.medusa/server \
