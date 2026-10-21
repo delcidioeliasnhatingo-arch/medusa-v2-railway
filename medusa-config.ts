@@ -89,18 +89,6 @@ module.exports = defineConfig({
       jwtExpiresIn: '3650d',
       cookieSecret: process.env.COOKIE_SECRET,
     },
-    sessionOptions: {
-      cookie: {
-        maxAge: 10 * 365 * 24 * 60 * 60 * 1000,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none',
-      },
-      rolling: true,
-      resave: true,
-      saveUninitialized: true,
-    },
-
   },
   admin: {
     // The worker never serves or builds the admin. DISABLE_MEDUSA_ADMIN wins
