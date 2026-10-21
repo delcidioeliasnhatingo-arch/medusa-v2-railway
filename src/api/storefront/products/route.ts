@@ -8,11 +8,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       entity: "product",
       fields: [
         "id", "title", "handle", "subtitle", "description", "status",
-        "thumbnail", "created_at", "metadata",
-        "images.url",
+        "thumbnail", "created_at", "metadata", "images.url",
         "variants.id", "variants.title", "variants.sku", "variants.thumbnail",
-        "variants.manage_inventory", "variants.inventory_quantity",
-        "variants.created_at", "variants.prices.amount", "variants.prices.currency_code",
+        "variants.manage_inventory", "variants.inventory_quantity", "variants.created_at",
         "variants.options.value", "variants.options.option.title",
         "categories.id", "categories.name", "categories.handle",
         "tags.value", "type.value", "collection.title"
@@ -23,7 +21,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60, stale-while-revalidate=300")
     return res.status(200).json({ products: data, count: metadata?.count ?? data.length })
   } catch (error) {
-    req.scope.resolve(ContainerRegistrationKeys.LOGGER).error("Storefront catalog query failed", error)
+    req.scope.resolve(ContainerRegistrationKeys.LOGGER).error("Storefront catalog query failed")
     return res.status(500).json({ message: "Unable to load published storefront products" })
   }
 }
