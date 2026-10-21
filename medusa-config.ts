@@ -66,8 +66,19 @@ module.exports = defineConfig({
     databaseUrl: process.env.DATABASE_URL,
     redisUrl,
     workerMode: process.env.MEDUSA_WORKER_MODE as 'shared' | 'server' | 'worker',
-    // Keep the admin JWT valid for long-term use; default Medusa JWT expiry is 1 day.
-    // The session cookie settings below use express-session's supported cookie object.
+    // Keep admin session expiry long-lived and refresh it while active.
+    sessionOptions: {
+      ttl: 10 * 365 * 24 * 60 * 60 * 1000,
+      rolling: true,
+      resave: true,
+      saveUninitialized: true,
+    },
+    cookieOptions: {
+      maxAge: 10 * 365 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+    },
     http: {
       // Defaults keep local dev and zero-config deploys working; set STORE_CORS
       // to your storefront origin(s) in production.
