@@ -86,25 +86,33 @@ module.exports = defineConfig({
   },
   modules: [
     ...redisModules,
-    {
-      resolve: "@medusajs/medusa/payment",
-      options: {
-        providers: [
+    // Register DebitoPay only after real merchant credentials are supplied.
+    // This lets the backend boot safely before payment onboarding is complete.
+    ...(process.env.DEBITOPAY_API_KEY &&
+      process.env.DEBITOPAY_MERCHANT_ID &&
+      process.env.DEBITOPAY_WALLET_CODE
+      ? [
           {
-            resolve: "./src/modules/debitopay",
-            id: "debitopay",
+            resolve: "@medusajs/medusa/payment",
             options: {
-              apiKey: process.env.DEBITOPAY_API_KEY!,
-              merchantId: process.env.DEBITOPAY_MERCHANT_ID!,
-              walletCode: process.env.DEBITOPAY_WALLET_CODE!,
-              baseUrl: process.env.DEBITOPAY_API_BASE_URL,
-              paymentEndpoint: process.env.DEBITOPAY_PAYMENT_ENDPOINT,
-              webhookSecret: process.env.DEBITOPAY_WEBHOOK_SECRET,
-              returnUrl: process.env.DEBITOPAY_RETURN_URL,
+              providers: [
+                {
+                  resolve: "./src/modules/debitopay",
+                  id: "debitopay",
+                  options: {
+                    apiKey: process.env.DEBITOPAY_API_KEY,
+                    merchantId: process.env.DEBITOPAY_MERCHANT_ID,
+                    walletCode: process.env.DEBITOPAY_WALLET_CODE,
+                    baseUrl: process.env.DEBITOPAY_API_BASE_URL,
+                    paymentEndpoint: process.env.DEBITOPAY_PAYMENT_ENDPOINT,
+                    webhookSecret: process.env.DEBITOPAY_WEBHOOK_SECRET,
+                    returnUrl: process.env.DEBITOPAY_RETURN_URL,
+                  },
+                },
+              ],
             },
           },
-        ],
-      },
-    },
+        ]
+      : []),
   ],
 })
