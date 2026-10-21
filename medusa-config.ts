@@ -66,16 +66,16 @@ module.exports = defineConfig({
     databaseUrl: process.env.DATABASE_URL,
     redisUrl,
     workerMode: process.env.MEDUSA_WORKER_MODE as 'shared' | 'server' | 'worker',
-    // Keep admin sessions valid for 24 hours and refresh expiry while active.
+    // Keep admin sessions persistent for long-term use and refresh expiry while active.
     // Redis is configured above so session state can be shared across instances.
     sessionOptions: {
-      ttl: 24 * 60 * 60 * 1000,
+      ttl: 10 * 365 * 24 * 60 * 60 * 1000,
       rolling: true,
       resave: true,
       saveUninitialized: true,
     },
     cookieOptions: {
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: 10 * 365 * 24 * 60 * 60 * 1000,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'none',
