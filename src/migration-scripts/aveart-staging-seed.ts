@@ -1,8 +1,6 @@
 import { MedusaContainer } from "@medusajs/framework";
 import {
   ContainerRegistrationKeys,
-  ModuleRegistrationName,
-  Modules,
   ProductStatus,
 } from "@medusajs/framework/utils";
 import {
@@ -83,13 +81,15 @@ export default async function aveart_staging_seed({
   });
 
   const { result: regionResult } = await createRegionsWorkflow(container).run({
-    input: [
-      {
-        name: "South Africa",
-        currency_code: "zar",
-        countries: ["za"],
-      },
-    ],
+    input: {
+      regions: [
+        {
+          name: "South Africa",
+          currency_code: "zar",
+          countries: ["za"],
+        },
+      ],
+    },
   });
   const region = regionResult[0];
 
@@ -171,7 +171,7 @@ export default async function aveart_staging_seed({
               sku: `AVEART-STG-SHIRT-${size}-${color.toUpperCase()}`,
               options: { Size: size, Color: color },
               prices: [{ amount: 799, currency_code: "zar" }],
-            })),
+            }))),
         },
         {
           title: "AVEART Staging Essential Tee",
@@ -190,7 +190,7 @@ export default async function aveart_staging_seed({
               sku: `AVEART-STG-TEE-${size}-${color.toUpperCase()}`,
               options: { Size: size, Color: color },
               prices: [{ amount: 449, currency_code: "zar" }],
-            })),
+            }))),
         },
         {
           title: "AVEART Staging Tote Bag",
