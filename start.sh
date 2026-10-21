@@ -43,7 +43,7 @@ echo "[start] Postgres reachable"
 
 if [ "${MIGRATE_ON_BOOT:-true}" = "true" ] && [ "${MODE}" != "worker" ]; then
   echo "[start] running migrations (medusa db:migrate)..."
-  npm run predeploy
+  npx --no-install medusa db:migrate
   echo "[start] migrations complete"
 fi
 
