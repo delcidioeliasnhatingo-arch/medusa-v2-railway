@@ -30,10 +30,10 @@ This document tracks the AVEART store integration. It is a working plan, not a c
 - [ ] Verify database migrations and `GET /health` on a deployed staging instance.
 
 ### Stage 2 — Connect the existing storefront
-- [ ] Inspect the frontend repository and map its current product/cart/checkout components.
-- [ ] Configure one public backend URL in the frontend build environment (for example `VITE_MEDUSA_BACKEND_URL`, after confirming the frontend build tool).
-- [ ] Replace demo/test product data with Medusa Store API data.
-- [ ] Make product variants, prices and currency come from Medusa; configure the South African sales channel and ZAR.
+- [x] Inspect the frontend repository: it is React/Vite; current screens still call same-origin `/api/*` routes, while root `server.ts` is empty and `src/server/*` is legacy SQLite/demo code.
+- [x] Add public Vite placeholders for `VITE_MEDUSA_BACKEND_URL`, `VITE_MEDUSA_PUBLISHABLE_KEY`, `VITE_MEDUSA_REGION_ID`, and `VITE_MEDUSA_SALES_CHANNEL_ID`.
+- [x] Add a typed browser-side Medusa Store API client foundation for products/categories, carts, payment sessions and cart completion. Existing screens are not switched over yet.
+- [ ] Wire the existing product screens to Medusa data and map variant prices/attributes after the region and catalogue are configured.
 - [ ] Persist the cart through Medusa instead of local-only checkout state.
 - [ ] Create checkout/payment sessions server-side; never expose API keys or webhook secrets in frontend code.
 - [ ] Show pending, failed, and completed payment states and an order confirmation page.
