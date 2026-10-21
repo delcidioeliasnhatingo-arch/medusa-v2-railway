@@ -16,10 +16,10 @@ const normalizeRedisUrl = (url?: string): string | undefined => {
 
 const redisUrl = normalizeRedisUrl(process.env.REDIS_URL)
 
-// Production modules (event bus, workflow engine, cache, locks) all run on
-// Redis so that a `server` deployment and a `worker` deployment share events
-// and state. Without REDIS_URL (local dev) Medusa falls back to the in-memory
-// defaults, so `npm run dev` works with no extra services.
+// Redis-backed event bus, workflow engine, cache, and session storage are
+// configured when REDIS_URL exists. The locking module uses Medusa's built-in
+// default provider; registering the internal module as its own provider makes
+// Medusa fail during startup.
 const redisModules = redisUrl
   ? [
       {
@@ -45,27 +45,30 @@ const redisModules = redisUrl
           ],
         },
       },
-      {
-        resolve: '@medusajs/medusa/locking',
-        options: {
-          providers: [
-            {
-              resolve: '@medusajs/medusa/locking-redis',
-              id: 'locking-redis',
-              is_default: true,
-              options: { redisUrl },
-            },
-          ],
-        },
-      },
     ]
   : []
+
+const sessionLifetimeMs = 24 * 60 * 60 * 1000
 
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     redisUrl,
     workerMode: process.env.MEDUSA_WORKER_MODE as 'shared' | 'server' | 'worker',
+    // Keep admin sessions valid for 24 hours and refresh expiry during use.
+    // REDIS_URL must remain configured so sessions survive across instances.
+    sessionOptions: {
+      ttl: sessionLifetimeMs,
+      rolling: true,
+      resave: true,
+      saveUninitialized: true,
+    },
+    cookieOptions: {
+      maxAge: sessionLifetimeMs,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+    },
     http: {
       // Defaults keep local dev and zero-config deploys working; set STORE_CORS
       // to your storefront origin(s) in production.
@@ -86,25 +89,33 @@ module.exports = defineConfig({
   },
   modules: [
     ...redisModules,
-    {
-      resolve: "@medusajs/medusa/payment",
-      options: {
-        providers: [
+    // Register DebitoPay only after real merchant credentials are supplied.
+    // This lets the backend boot safely before payment onboarding is complete.
+    ...(process.env.DEBITOPAY_API_KEY &&
+      process.env.DEBITOPAY_MERCHANT_ID &&
+      process.env.DEBITOPAY_WALLET_CODE
+      ? [
           {
-            resolve: "./src/modules/debitopay",
-            id: "debitopay",
+            resolve: '@medusajs/medusa/payment',
             options: {
-              apiKey: process.env.DEBITOPAY_API_KEY!,
-              merchantId: process.env.DEBITOPAY_MERCHANT_ID!,
-              walletCode: process.env.DEBITOPAY_WALLET_CODE!,
-              baseUrl: process.env.DEBITOPAY_API_BASE_URL,
-              paymentEndpoint: process.env.DEBITOPAY_PAYMENT_ENDPOINT,
-              webhookSecret: process.env.DEBITOPAY_WEBHOOK_SECRET,
-              returnUrl: process.env.DEBITOPAY_RETURN_URL,
+              providers: [
+                {
+                  resolve: './src/modules/debitopay',
+                  id: 'debitopay',
+                  options: {
+                    apiKey: process.env.DEBITOPAY_API_KEY,
+                    merchantId: process.env.DEBITOPAY_MERCHANT_ID,
+                    walletCode: process.env.DEBITOPAY_WALLET_CODE,
+                    baseUrl: process.env.DEBITOPAY_API_BASE_URL,
+                    paymentEndpoint: process.env.DEBITOPAY_PAYMENT_ENDPOINT,
+                    webhookSecret: process.env.DEBITOPAY_WEBHOOK_SECRET,
+                    returnUrl: process.env.DEBITOPAY_RETURN_URL,
+                  },
+                },
+              ],
             },
           },
-        ],
-      },
-    },
+        ]
+      : []),
   ],
 })
